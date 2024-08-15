@@ -1,0 +1,5 @@
+things to note for while wrting a gstreamer code
+
+1. always add the bus_watch_id before starting the main loop
+    it is mainly used to check the pipeline added to the bus with a callback function and calls the function whenever a message comes on the bus.
+2. if a pad is already linked then we cna just skip past it to unref so better to add the condition to check if it is already linked/not.
