@@ -16,6 +16,7 @@ bus_call (GstBus *bus,
             gpointer data)
 {
     GMainLoop *loop = (GMainLoop *) data;
+    GstElement *pipeline;
 
     switch (GST_MESSAGE_TYPE (msg))
     {
@@ -32,6 +33,22 @@ bus_call (GstBus *bus,
 
         g_printerr ("Error: %s\n", error->message);
         g_error_free(error);
+    }
+
+    case GST_MESSAGE_BUFFERING:
+    {
+        gint percent=0;
+        gst_message_parse_buffering(msg, &percent);
+        g_print("Buffering (%3d%%)\n", percent);
+        if(percent < 100)
+        {
+            gst_element_set_state(GST_ELEMENT(pipeline), GST_STATE_PAUSED);
+        }
+        else
+        {
+            gst_element_set_state(GST_ELEMENT(pipeline), GST_STATE_PLAYING);
+        }
+        break;
     }
     
     default:
@@ -70,7 +87,7 @@ int main(int argc, char *argv[])
 {
     GMainLoop *loop;
 
-    GstElement *pipeline, *source, *decoder, *conv, *encoder, *sink;
+    GstElement *pipeline, *source, *decoder, *vidrate, *conv, *encoder, *sink;
     GstBus *bus;
     guint bus_watch_id;
 
@@ -87,28 +104,30 @@ int main(int argc, char *argv[])
     pipeline = gst_pipeline_new ("frame_extract");
     source = gst_element_factory_make ("filesrc",   "file-source");
     decoder = gst_element_factory_make ("decodebin", "decoder-bin");
+    vidrate = gst_element_factory_make ("videorate", "videorater");
     conv = gst_element_factory_make ("videoconvert", "videoconverter");
     encoder = gst_element_factory_make ("jpegenc", "jpeg-encoder");
     sink = gst_element_factory_make ("multifilesink", "multiple files");
 
-    if (!pipeline || ! source || !decoder || !conv || !encoder || !sink)
+    if (!pipeline || ! source || !decoder || !vidrate || !conv || !encoder || !sink)
     {
         g_printerr ("could not create element\n");
         return -1;
     }
 
     g_object_set (G_OBJECT (source), "location", argv[1], NULL);
+    g_object_set (G_OBJECT (encoder), "quality", 85, NULL);
     // g_object_set (G_OBJECT (source), "location", "sample_720.mp4", NULL);
     g_object_set (G_OBJECT (sink), "location", "frame%05d.jpg", "sync", FALSE, NULL);
 
     
 
     gst_bin_add_many (GST_BIN (pipeline),
-                        source, decoder, conv, encoder, sink, NULL);
+                        source, decoder, vidrate, conv, encoder, sink, NULL);
     
     gst_element_link (source, decoder);
-    gst_element_link_many (conv, encoder, sink, NULL);
-    g_signal_connect (decoder, "pad-added", G_CALLBACK (on_pad_added), conv);
+    gst_element_link_many (vidrate, conv, encoder, sink, NULL);
+    g_signal_connect (decoder, "pad-added", G_CALLBACK (on_pad_added), vidrate);
 
     bus = gst_pipeline_get_bus(GST_PIPELINE (pipeline));
     bus_watch_id = gst_bus_add_watch (bus, bus_call, loop);
@@ -133,5 +152,5 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-
+/*when running the program if the folder where the frames are stored are open the we may get few corrupt/damaged/garbage frames but when we close the folder and open then it works fine.*/
 
